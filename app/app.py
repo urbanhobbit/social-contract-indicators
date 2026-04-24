@@ -945,4 +945,5 @@ def render_manual(_):
 if __name__ == "__main__":
     import os
     debug = os.environ.get("DASH_DEBUG", "true").lower() == "true"
-    app.run(debug=debug, port=int(os.environ.get("PORT", 8050)))
+    port  = int(os.environ.get("PORT", 7860))
+    app.run(debug=debug, host="0.0.0.0", port=port)
