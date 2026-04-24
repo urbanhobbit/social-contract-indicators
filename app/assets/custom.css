@@ -1,0 +1,42 @@
+/* ── Responsive tab bar ─────────────────────────────── */
+.nav-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+.nav-tabs::-webkit-scrollbar { display: none; }
+.nav-tabs .nav-link {
+    white-space: nowrap;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.82rem;
+}
+
+/* ── Navbar ─────────────────────────────────────────── */
+@media (max-width: 576px) {
+    .navbar-brand-text-sub { display: none; }
+    .navbar-brand-text { font-size: 0.95rem !important; }
+    .navbar img { height: 34px !important; }
+}
+
+/* ── KPI cards ──────────────────────────────────────── */
+@media (max-width: 576px) {
+    .kpi-value { font-size: 1.4rem !important; }
+}
+
+/* ── Leaderboard score badge ────────────────────────── */
+@media (max-width: 400px) {
+    .lb-score { font-size: 0.75rem !important; padding: 2px 6px !important; }
+}
+
+/* ── Modal full-screen on mobile ────────────────────── */
+@media (max-width: 768px) {
+    .modal-xl { max-width: 98vw !important; margin: 0.5rem auto; }
+    .modal-body { padding: 0.75rem; }
+}
+
+/* ── Prevent horizontal scroll ──────────────────────── */
+body { overflow-x: hidden; }
+
+/* ── Chart containers ───────────────────────────────── */
+.js-plotly-plot { width: 100% !important; }
