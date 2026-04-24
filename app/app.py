@@ -155,6 +155,122 @@ def build_radar(country_codes, level="Domain"):
     return fig
 
 
+def _build_tree(country_code):
+    """Build a collapsible Domain > Subdomain > Indicator tree for a country's modal."""
+    row_dom  = df_dom[df_dom["Country"]  == country_code]
+    row_sub  = df_sub[df_sub["Country"]  == country_code]
+    row_full = df_full[df_full["Country"] == country_code]
+
+    # EU baseline
+    eu_dom  = df_dom[df_dom["Country"]  == "EU"].iloc[0]  if "EU" in df_dom["Country"].values  else None
+    eu_sub  = df_sub[df_sub["Country"]  == "EU"].iloc[0]  if "EU" in df_sub["Country"].values  else None
+
+    accordion_items = []
+
+    for dom in DOMAIN_COLS:
+        dom_color = DOMAIN_COLORS.get(dom, "#4361EE")
+        dom_score = float(row_dom.iloc[0][dom]) if not row_dom.empty and dom in row_dom.columns else None
+        dom_grade = score_to_grade(dom_score) if dom_score is not None else "N/A"
+        dom_bar_c = score_to_color(dom_score) if dom_score is not None else "#ccc"
+
+        # EU diff for domain
+        if eu_dom is not None and dom in eu_dom.index and country_code != "EU" and dom_score is not None:
+            diff = dom_score - float(eu_dom[dom])
+            eu_arrow = html.Span(
+                f" ▲ +{diff:.2f}" if diff >= 0 else f" ▼ {diff:.2f}",
+                style={"fontSize":"0.72rem","fontWeight":"700",
+                       "color":"#2e7d32" if diff >= 0 else "#c62828","marginLeft":"6px"}
+            )
+        else:
+            eu_arrow = html.Span()
+
+        # Domain header label
+        dom_label = html.Div([
+            dbc.Progress(value=round((dom_score or 0)*100), style={"height":"6px","marginBottom":"4px"},
+                         color=("success" if (dom_score or 0)>=0.67 else "warning" if (dom_score or 0)>=0.34 else "danger")),
+            dbc.Row([
+                dbc.Col(html.Span(dom, style={"fontWeight":"700","fontSize":"0.9rem"}), width=7),
+                dbc.Col([
+                    html.Span(dom_grade, style={"fontWeight":"900","fontSize":"1rem","color":dom_bar_c}),
+                    html.Span(f" {dom_score:.2f}" if dom_score else "", style={"fontSize":"0.78rem","color":"#888"}),
+                    eu_arrow,
+                ], width=5, className="text-end"),
+            ], align="center"),
+        ], style={"width":"100%"})
+
+        # Subdomains inside this domain
+        sub_children = []
+        subs_in_dom = hierarchy[hierarchy["Domain"] == dom]["Subdomain"].unique()
+        for sub in subs_in_dom:
+            sub_score = float(row_sub.iloc[0][sub]) if not row_sub.empty and sub in row_sub.columns else None
+            sub_grade = score_to_grade(sub_score) if sub_score is not None else "N/A"
+            sub_bar_c = score_to_color(sub_score) if sub_score is not None else "#ccc"
+
+            # EU diff for subdomain
+            if eu_sub is not None and sub in eu_sub.index and country_code != "EU" and sub_score is not None:
+                sdiff = sub_score - float(eu_sub[sub])
+                sub_eu = html.Span(
+                    f" ▲ +{sdiff:.2f}" if sdiff >= 0 else f" ▼ {sdiff:.2f}",
+                    style={"fontSize":"0.68rem","fontWeight":"700",
+                           "color":"#2e7d32" if sdiff >= 0 else "#c62828","marginLeft":"4px"}
+                )
+            else:
+                sub_eu = html.Span()
+
+            # Indicators inside this subdomain
+            inds_in_sub = hierarchy[(hierarchy["Domain"]==dom) & (hierarchy["Subdomain"]==sub)]["Indicator"].tolist()
+            ind_rows = []
+            for ind in inds_in_sub:
+                ind_val = float(row_full.iloc[0][ind]) if not row_full.empty and ind in row_full.columns and not pd.isna(row_full.iloc[0][ind]) else None
+                ind_color = score_to_color(ind_val) if ind_val is not None else "#ccc"
+                ind_rows.append(
+                    html.Div([
+                        dbc.Row([
+                            dbc.Col(
+                                html.Span(ind, style={"fontSize":"0.75rem","color":"#555"}),
+                                width=9
+                            ),
+                            dbc.Col(
+                                html.Span(
+                                    f"{ind_val:.2f}" if ind_val is not None else "N/A",
+                                    style={"fontSize":"0.75rem","fontWeight":"700","color":ind_color}
+                                ),
+                                width=3, className="text-end"
+                            ),
+                        ], align="center", className="g-0"),
+                    ], style={"padding":"3px 0","borderBottom":"1px solid #f0f0f0"})
+                )
+
+            sub_children.append(
+                dbc.Card([
+                    dbc.CardHeader(
+                        dbc.Row([
+                            dbc.Col(html.Span(f"  {sub}", style={"fontSize":"0.82rem","fontWeight":"600","color":"#333"}), width=7),
+                            dbc.Col([
+                                html.Span(sub_grade, style={"fontWeight":"800","fontSize":"0.9rem","color":sub_bar_c}),
+                                html.Span(f" {sub_score:.2f}" if sub_score else "", style={"fontSize":"0.72rem","color":"#888"}),
+                                sub_eu,
+                            ], width=5, className="text-end"),
+                        ], align="center"),
+                        style={"padding":"6px 12px","backgroundColor":"#f8f9fa","cursor":"default"}
+                    ),
+                    dbc.CardBody(ind_rows, style={"padding":"8px 16px"}),
+                ], style={"marginBottom":"6px","border":"1px solid #e9ecef","borderRadius":"8px",
+                          "borderLeft":f"3px solid {dom_color}"})
+            )
+
+        accordion_items.append(
+            dbc.AccordionItem(
+                html.Div(sub_children),
+                title=dom_label,
+                item_id=f"tree-{dom}",
+            )
+        )
+
+    return dbc.Accordion(accordion_items, start_collapsed=True, flush=False,
+                         style={"borderRadius":"10px"})
+
+
 def build_bar(col, df_source, title, use_traffic_light=True):
     n      = len(df_source)
     height = max(300, min(900, n * 28 + 80))   # dynamic: ~28px per country
@@ -190,6 +306,7 @@ def build_map(df_map, col, title):
                     fitbounds="locations", visible=False)
     fig.update_layout(
         margin={"r":0,"t":40,"l":0,"b":0},
+        height=620,
         coloraxis_colorbar=dict(
             title="Score", ticks="outside", tickformat=".2f",
             tickvals=[0,0.34,0.67,1],
@@ -478,7 +595,7 @@ TAB_MAP = dbc.Container([
     ], className="mb-2"),
     dcc.Graph(id="map-chart",
               config={"displayModeBar":False, "responsive":True},
-              style={"minHeight":"320px"}),
+              style={"minHeight":"600px"}),
 ], fluid=True, style={"maxWidth":"1400px"})
 
 
@@ -740,12 +857,8 @@ def leaderboard_click(n_clicks_list, is_open):
             ),
         ]),
         html.Hr(),
-        html.H6("Domain Scores", style={"fontWeight":"700","marginBottom":"10px"}),
-        build_domain_score_cards(cc),
-        html.Hr(),
-        html.H6("Subdomain Breakdown", style={"fontWeight":"700","marginBottom":"6px"}),
-        dcc.Graph(figure=sub_fig,
-                  config={"displayModeBar":False,"responsive":True}),
+        html.H6("Domain & Subdomain Breakdown", style={"fontWeight":"700","marginBottom":"10px"}),
+        _build_tree(cc),
     ])
 
     return radar_fig, {"display":"none"}, True, get_country_name(cc), modal_body
