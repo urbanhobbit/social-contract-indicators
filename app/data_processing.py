@@ -3,7 +3,11 @@ import numpy as np
 import pycountry
 import os
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Local: files are one level up (D:\Social Indicators\)
+# HF Space / Docker: files are in the same directory as this script
+_script_dir   = os.path.dirname(os.path.abspath(__file__))
+_parent_dir   = os.path.dirname(_script_dir)
+BASE_DIR = _parent_dir if os.path.exists(os.path.join(_parent_dir, "Metadata.xlsx")) else _script_dir
 
 COUNTRY_NAMES = {
     "EU": "European Union", "BE": "Belgium", "BG": "Bulgaria", "CZ": "Czechia",
