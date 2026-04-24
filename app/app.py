@@ -302,8 +302,16 @@ def build_map(df_map, col, title):
         color_continuous_scale=["#F44336","#FFC107","#4CAF50"],
         range_color=[0,1], scope="europe", title=title,
     )
-    fig.update_geos(projection_type="mercator", center={"lat":54,"lon":15},
-                    fitbounds="locations", visible=False)
+    fig.update_geos(
+        projection_type="mercator",
+        lataxis_range=[34, 72],
+        lonaxis_range=[-25, 45],
+        visible=True,
+        showland=True, landcolor="#f0f0f0",
+        showocean=True, oceancolor="#d6eaf8",
+        showcoastlines=True, coastlinecolor="#aaa",
+        showframe=False,
+    )
     fig.update_layout(
         margin={"r":0,"t":40,"l":0,"b":0},
         height=620,
