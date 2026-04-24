@@ -37,6 +37,11 @@ BASE_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def build_leaderboard():
     df = df_comp.sort_values("Composite_Index", ascending=False).reset_index(drop=True)
+
+    # EU baseline for arrow indicators
+    eu_row   = df_comp[df_comp["Country"] == "EU"]
+    eu_score = eu_row["Composite_Index"].values[0] if not eu_row.empty else None
+
     rows = []
     for i, row in df.iterrows():
         rank  = i + 1
@@ -52,13 +57,28 @@ def build_leaderboard():
             )
             for b in badges_map.get(row["Country"], [])
         ]
+
+        # EU comparison arrow
+        if eu_score is not None and row["Country"] != "EU":
+            diff  = row["Composite_Index"] - eu_score
+            arrow = html.Span(
+                f" ▲ +{diff:.2f}" if diff >= 0 else f" ▼ {diff:.2f}",
+                style={"fontSize":"0.68rem","fontWeight":"700",
+                       "color":"#2e7d32" if diff >= 0 else "#c62828",
+                       "marginLeft":"4px"}
+            )
+        else:
+            arrow = html.Span(" EU avg", style={"fontSize":"0.65rem","color":"#888","marginLeft":"4px"})
+
         rows.append(
             dbc.ListGroupItem(
                 dbc.Row([
                     dbc.Col(html.Span(medal, style={"fontSize":"1.2rem"}), width=1),
                     dbc.Col([
-                        html.Div(html.Strong(row["CountryName"],
-                                 style={"fontSize":"0.9rem"}), style={"marginBottom":"2px"}),
+                        html.Div([
+                            html.Strong(row["CountryName"], style={"fontSize":"0.9rem"}),
+                            arrow,
+                        ], style={"marginBottom":"2px"}),
                         html.Div(chips, style={"lineHeight":"1.6"}),
                     ], width=8),
                     dbc.Col(
@@ -389,6 +409,29 @@ TAB_HOME = dbc.Container([
                       style={"borderRadius":"12px"}),
         ], xs=12, md=7),
     ]),
+
+    html.Div(style={"height":"2rem"}),
+
+    # ── Domain Progress Bar Section ───────────────────────────────────────────
+    html.Hr(style={"borderColor":"#E0E0E0","margin":"0.5rem 0 1.2rem 0"}),
+    html.H4("📊 Country Domain Scorecard",
+            style={"fontWeight":"800","color":"#14213D","marginBottom":"0.3rem",
+                   "fontSize":"clamp(1rem, 3vw, 1.3rem)"}),
+    html.P("Select a country to see its score across all six dimensions.",
+           style={"color":"#888","marginBottom":"0.8rem","fontSize":"0.86rem"}),
+    dbc.Row([
+        dbc.Col(
+            dcc.Dropdown(
+                id="scorecard-country",
+                options=[{"label": get_country_name(c), "value": c} for c in COUNTRIES],
+                value="EU",
+                clearable=False,
+                style={"fontSize":"0.9rem"},
+            ),
+            xs=12, sm=6, md=4, className="mb-3"
+        )
+    ]),
+    html.Div(id="domain-progress-bars"),
 
     html.Div(style={"height":"2rem"}),
 ], fluid=True, style={"maxWidth":"1400px"})
@@ -940,6 +983,90 @@ def render_manual(_):
             download="Social_Contract_Indicators_Manual.pdf",
         )
     return dbc.Alert("PDF file not found on server.", color="warning")
+
+
+@app.callback(Output("domain-progress-bars", "children"), Input("scorecard-country", "value"))
+def render_domain_progress(country_code):
+    if not country_code:
+        return html.Div()
+
+    row = df_dom[df_dom["Country"] == country_code]
+    if row.empty:
+        return html.Div("No data available.")
+    row = row.iloc[0]
+
+    # EU baseline for comparison arrows
+    eu_row   = df_dom[df_dom["Country"] == "EU"]
+    eu_vals  = eu_row.iloc[0] if not eu_row.empty else None
+
+    bars = []
+    for dom in DOMAIN_COLS:
+        score     = row[dom] if dom in row.index and not pd.isna(row[dom]) else None
+        if score is None:
+            continue
+        grade     = score_to_grade(score)
+        bar_color = score_to_color(score)
+        dom_color = DOMAIN_COLORS.get(dom, "#4361EE")
+        pct       = round(score * 100)
+
+        # EU comparison
+        if eu_vals is not None and dom in eu_vals.index and country_code != "EU":
+            diff = score - eu_vals[dom]
+            eu_badge = html.Span(
+                f"▲ +{diff:.2f} vs EU" if diff >= 0 else f"▼ {diff:.2f} vs EU",
+                style={"fontSize":"0.7rem","fontWeight":"700","marginLeft":"8px",
+                       "color":"#2e7d32" if diff >= 0 else "#c62828"}
+            )
+        else:
+            eu_badge = html.Span()
+
+        bars.append(
+            dbc.Card([
+                dbc.CardBody([
+                    dbc.Row([
+                        dbc.Col([
+                            html.Div([
+                                html.Span(dom, style={"fontWeight":"700","fontSize":"0.88rem",
+                                                      "color":"#14213D"}),
+                                eu_badge,
+                            ]),
+                        ], xs=8),
+                        dbc.Col([
+                            html.Span(grade,
+                                      style={"fontWeight":"900","fontSize":"1.3rem",
+                                             "color": bar_color}),
+                            html.Span(f"  {score:.2f}",
+                                      style={"fontSize":"0.82rem","color":"#888","marginLeft":"4px"}),
+                        ], xs=4, className="text-end"),
+                    ], className="mb-2", align="center"),
+                    dbc.Progress(
+                        value=pct,
+                        style={"height":"14px","borderRadius":"7px"},
+                        color=("success" if score >= 0.67 else "warning" if score >= 0.34 else "danger"),
+                    ),
+                ], style={"padding":"0.75rem 1rem"}),
+            ], style={"borderLeft":f"5px solid {dom_color}","borderRadius":"10px",
+                      "boxShadow":"0 2px 8px rgba(0,0,0,0.06)","marginBottom":"0.6rem"})
+        )
+
+    country_name = get_country_name(country_code)
+    badges       = badges_map.get(country_code, [])
+    badge_chips  = [
+        html.Span(BADGE_BY_ID[b]["label"],
+                  style={"backgroundColor": BADGE_BY_ID[b]["color"],
+                         "color":"#fff","borderRadius":"10px","padding":"3px 8px",
+                         "fontSize":"0.75rem","marginRight":"5px","display":"inline-block",
+                         "marginBottom":"4px"})
+        for b in badges
+    ]
+
+    return html.Div([
+        html.Div([
+            html.H5(country_name, style={"fontWeight":"800","display":"inline","marginRight":"10px"}),
+            *badge_chips,
+        ], style={"marginBottom":"1rem"}),
+        *bars,
+    ])
 
 
 if __name__ == "__main__":
